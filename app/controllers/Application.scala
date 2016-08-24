@@ -60,4 +60,8 @@ class Application extends Controller {
     token ← Play.configuration.getString("twitter.token")
     tokenSecret ← Play.configuration.getString("twitter.tokenSecret")
   } yield (ConsumerKey(apiKey, apiSecret), RequestToken(token, tokenSecret))
+
+  def replicateFeed = Action { implicit request ⇒
+    Ok.feed(TwitterStreamer.subscribeNode)
+  }
 }

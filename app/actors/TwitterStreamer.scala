@@ -25,26 +25,28 @@ object TwitterStreamer {
 
   def connect(): Unit = {
     credentials.map { case (consumerKey, requestToken) ⇒
-        val (iteratee, enumerator) = Concurrent.joined[Array[Byte]]
+      val (iteratee, enumerator) = Concurrent.joined[Array[Byte]]
 
-        val jsonStream: Enumerator[JsObject] = enumerator &>
+      val jsonStream: Enumerator[JsObject] = enumerator &>
         Encoding.decode() &>
         Enumeratee.grouped(JsonIteratees.jsSimpleObject)
 
-        val (be, _) = Concurrent.broadcast(jsonStream)
-        broadcastEnumerator = Some(be)
+      val (be, _) = Concurrent.broadcast(jsonStream)
+      broadcastEnumerator = Some(be)
 
-        val url = "https://stream.twitter.com/1.1/statuses/filter.json"
-        WS
+      val maybeMasterNodeUrl = Option(System.getProperty("masterNodeUrl"))
+      val url = maybeMasterNodeUrl.getOrElse("https://stream.twitter.com/1.1/statuses/filter.json")
+
+      WS
         .url(url)
         .sign(OAuthCalculator(consumerKey, requestToken))
-        .withQueryString("track" → "reactive")
+        .withQueryString("track" → "cat")
         .get { response ⇒
           Logger.info("Status: " + response.status)
           iteratee
         }.map { _ ⇒
-          Logger.info("Twitter stream closed")
-        }
+        Logger.info("Twitter stream closed")
+      }
     } getOrElse {
       Logger.error("Twitter credentials missing")
     }
@@ -63,7 +65,10 @@ object TwitterStreamer {
     }
     val twitterClient = Iteratee.foreach[JsObject](t ⇒ out ! t)
     broadcastEnumerator.foreach(enumerator ⇒ enumerator run twitterClient)
+  }
 
-
+  def subscribeNode: Enumerator[JsObject] = {
+    if (broadcastEnumerator.isEmpty) connect()
+    broadcastEnumerator.getOrElse(Enumerator.empty[JsObject])
   }
 }
